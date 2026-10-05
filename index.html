@@ -300,6 +300,7 @@ a{color:inherit;text-decoration:none}
   .hero-status{left:16px;right:16px;bottom:16px;font-size:9px}
   .hero-status .clock{display:none}
   .hero-status .sn{display:none}
+  .why-clip{-webkit-mask-image:none!important;mask-image:none!important}
   .hero-status .live{white-space:nowrap}
   .manifesto{height:100svh}
   .ld-logo{transform:translateX(-50%);width:120px;top:18px}
@@ -862,7 +863,7 @@ if (renderer) {
     if (after > H * 1.25) { canvas.style.visibility = 'hidden'; return; }
     canvas.style.visibility = 'visible';
     const mob = isMobile();
-    const A = mob ? { x: .74, y: .76, s: .5 } : { x: .79, y: .5, s: .9 };
+    const A = mob ? { x: .67, y: .69, s: .68 } : { x: .79, y: .5, s: .9 };
     const B = mob ? { x: .5, y: .27, s: .56 } : { x: .245, y: .5, s: 1.12 };
     const [ax, ay] = toWorld(A.x, A.y), [bx, by] = toWorld(B.x, B.y);
     mouse.sx += (mouse.x - mouse.sx) * .05; mouse.sy += (mouse.y - mouse.sy) * .05;
