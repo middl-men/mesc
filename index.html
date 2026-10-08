@@ -306,6 +306,7 @@ a{color:inherit;text-decoration:none}
   .ld-logo{transform:translateX(-50%);width:120px;top:18px}
 }
 @media (prefers-reduced-motion:reduce){.hero-status .live::before,.ld-meta .st::before{animation:none}}
+.dust-veil{position:absolute;inset:-2px;z-index:4;pointer-events:none;--r:-45vmax;background:radial-gradient(circle at 74% 70%,#fff 0,#fff var(--r),rgba(255,255,255,.85) calc(var(--r) + 10vmax),rgba(255,255,255,0) calc(var(--r) + 32vmax))}
 </style>
 </head>
 <body>
@@ -349,7 +350,7 @@ a{color:inherit;text-decoration:none}
     <div class="hero-cta"><a class="btn" href="#services" data-go="services"><span class="ar">↳</span> Explore what we do</a></div>
   </div>
   <div class="cue" id="cue"><span>Scroll</span><i></i></div>
-  <div class="hero-status"><span class="live"><span class="sn">All systems normal ·&nbsp;</span>Nothing has happened for&nbsp;<b id="upt">00:00:00</b></span><span class="clock">Cairo, EG — <b id="heroClock" style="color:inherit">--:--</b></span></div>
+  <div class="dust-veil" id="dustVeil" aria-hidden="true"></div>
 </section>
 
 <!-- 02 ABOUT -->
@@ -599,10 +600,13 @@ burger.addEventListener('click', () => toggleMenu(!document.body.classList.conta
 const mm = gsap.matchMedia();
 
 // 01 HERO — content lifts & blurs away, backdrop drifts
-gsap.timeline({ scrollTrigger: { trigger: '#hero', start: 'top top', end: 'bottom top', scrub: true } })
-  .to('#heroInner', { yPercent: -60, opacity: 0, filter: 'blur(10px)', ease: 'none' }, 0)
-  .to('#heroBg', { scale: 1.18, yPercent: 18, ease: 'none' }, 0)
-  .to('#cue', { opacity: 0, ease: 'none', duration: .2 }, 0);
+// The hero holds while the extinguisher discharges: the powder cloud swallows the copy and
+// whites the screen out, which becomes the white of the About section underneath.
+const heroTL = gsap.timeline({ scrollTrigger: { trigger: '#hero', start: 'top top', end: '+=140%', pin: true, scrub: true, anticipatePin: 1 } })
+  .to('#heroInner', { opacity: 0, filter: 'blur(8px)', scale: .97, ease: 'power1.in', duration: .4 }, .3)
+  .fromTo('#dustVeil', { '--r': '-45vmax' }, { '--r': '150vmax', ease: 'power1.in', duration: .62 }, .32)
+  .to({}, { duration: .06 }, .94);
+window.__heroST = heroTL.scrollTrigger;
 
 // 02 ABOUT — words ink in as the extinguisher lands
 gsap.fromTo('#aboutText .w', { opacity: .1 }, { opacity: 1, stagger: .08, ease: 'none', scrollTrigger: { trigger: '#about', start: 'top 70%', end: 'top 5%', scrub: true } });
@@ -815,7 +819,9 @@ if (renderer) {
   add(new THREE.CylinderGeometry(.09, .12, .22, 24), M.metal, [-.22, 3.9, 0], [0, 0, Math.PI / 2]);
   // levers (flattened tubes)
   const lever = (a, b, c, y) => { const cu = new THREE.QuadraticBezierCurve3(new THREE.Vector3(...a), new THREE.Vector3(...b), new THREE.Vector3(...c)); const m = add(new THREE.TubeGeometry(cu, 40, .045, 12, false), M.orange); m.scale.z = 2.4; add(new THREE.SphereGeometry(.045, 12, 10), M.orange, c).scale.z = 2.4; return m; };
-  lever([.05, 4.08, 0], [.6, 4.42, 0], [1.3, 4.62, 0]);
+  const leverTop = new THREE.Group(); leverTop.position.set(.05, 4.08, 0); ext.add(leverTop);
+  { const before = ext.children.length; lever([.05, 4.08, 0], [.6, 4.42, 0], [1.3, 4.62, 0]);
+    ext.children.slice(before).forEach(m => { ext.remove(m); m.position.x -= .05; m.position.y -= 4.08; leverTop.add(m); }); }
   lever([.1, 3.95, 0], [.75, 4.02, 0], [1.32, 3.86, 0]);
   add(new THREE.CylinderGeometry(.03, .03, .2, 12), M.metal, [.55, 4.12, 0], [0, 0, -.25]);
   // hose
@@ -824,24 +830,109 @@ if (renderer) {
     new THREE.Vector3(-1.02, 3.1, .08), new THREE.Vector3(-.98, 2.3, .1), new THREE.Vector3(-.88, 1.6, .1),
     new THREE.Vector3(-.82, 1.12, .08)
   ]);
-  add(new THREE.TubeGeometry(hoseCurve, 160, .075, 20, false), M.hose);
+  const hoseRest = hoseCurve.points.map(p => p.clone());
+  const hoseMesh = add(new THREE.TubeGeometry(hoseCurve, 160, .075, 20, false), M.hose);
   const ferrule = (t, len = .16, r = .1) => { const p = hoseCurve.getPointAt(t), tg = hoseCurve.getTangentAt(t); const m = add(new THREE.CylinderGeometry(r, r, len, 28), M.metal, [p.x, p.y, p.z]); m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), tg); };
-  ferrule(.08); ferrule(.15, .12, .095); ferrule(.97, .14, .095);
+  ferrule(.08); ferrule(.15, .12, .095);
   // nozzle horn
   const end = hoseCurve.getPointAt(1);
-  add(new THREE.CylinderGeometry(.06, .14, .3, 32), M.hose, [end.x, end.y - .18, end.z]);
-  add(new THREE.CylinderGeometry(.145, .145, .03, 32), M.metal, [end.x, end.y - .34, end.z]);
+  // nozzle assembly rides on the end of the hose (local -Y = spray direction)
+  const nozzle = new THREE.Group(); nozzle.position.copy(end); ext.add(nozzle);
+  add(new THREE.CylinderGeometry(.095, .095, .14, 28), M.metal, [0, .1, 0], [0, 0, 0], nozzle);   // end ferrule
+  add(new THREE.CylinderGeometry(.06, .14, .3, 32), M.hose, [0, -.18, 0], [0, 0, 0], nozzle);
+  add(new THREE.CylinderGeometry(.145, .145, .03, 32), M.metal, [0, -.34, 0], [0, 0, 0], nozzle);
+  const DOWN = new THREE.Vector3(0, -1, 0), tgTmp = new THREE.Vector3();
+  // hose whip: the free end lifts outward and thrashes while the extinguisher fires
+  let hoseLast = -1;
+  function bendHose(f, t) {
+    const key = f < .001 ? 0 : 1;
+    if (!key && hoseLast === 0) return; hoseLast = key;
+    const n = hoseRest.length;
+    hoseCurve.points.forEach((p, i) => {
+      const w = Math.pow(i / (n - 1), 1.6), r = hoseRest[i];
+      p.set(
+        r.x + f * w * (-.42 + Math.sin(t * 16 + i * .9) * .09 + Math.sin(t * 5.3 + i) * .05),
+        r.y + f * w * (.3 + Math.cos(t * 13 + i * 1.3) * .06),
+        r.z + f * w * (.35 + Math.sin(t * 11 + i * .7) * .1));
+    });
+    hoseMesh.geometry.dispose();
+    hoseMesh.geometry = new THREE.TubeGeometry(hoseCurve, 120, .075, 16, false);
+    nozzle.position.copy(hoseCurve.getPointAt(1));
+    hoseCurve.getTangentAt(1, tgTmp);
+    nozzle.quaternion.setFromUnitVectors(DOWN, tgTmp.normalize());
+  }
+  bendHose(0, 0); hoseLast = -1;
   // hose bracket
   add(new THREE.BoxGeometry(.34, .12, .1), M.metal, [-.72, 1.7, .08]);
   add(new THREE.BoxGeometry(.06, .3, .12), M.orange, [-.62, 1.7, .06]);
   ext.position.y = -2.3;
+  const tip = new THREE.Object3D(); tip.position.set(0, -.34, 0); nozzle.add(tip);
+  const tipAxis = new THREE.Object3D(); tipAxis.position.set(0, -1.34, 0); nozzle.add(tipAxis); const axW = new THREE.Vector3();
+
+  /* --- discharge: dry-powder cloud, fully driven by scroll progress (so it scrubs both ways) --- */
+  const dust = (() => {
+    const N = innerWidth < 820 ? 3200 : 5200, FINE = .45;
+    const birth = new Float32Array(N), dir = new Float32Array(N * 3), speed = new Float32Array(N), seed = new Float32Array(N), big = new Float32Array(N), shade = new Float32Array(N);
+    let s = 9; const rnd = () => (s = (s * 16807) % 2147483647) / 2147483647;
+    for (let i = 0; i < N; i++) {
+      const fine = rnd() < FINE;
+      birth[i] = Math.pow(rnd(), .85) * .6;
+      // first a dense jet out of the horn (down-left), then billows rolling left and up across the copy
+      const ang = Math.PI + (rnd() - .5) * 1.1 + (fine ? -.35 : .15), lift = (rnd() - .35) * (fine ? .7 : 1.2);
+      const v = new THREE.Vector3(Math.cos(ang), Math.sin(ang) * .6 + lift, (rnd() - .5) * .9).normalize();
+      dir.set([v.x, v.y, v.z], i * 3);
+      speed[i] = fine ? 3 + rnd() * 6 : 4 + rnd() * 9;
+      seed[i] = rnd() * 100; big[i] = fine ? 0 : .55 + rnd() * .45; shade[i] = .86 + rnd() * .14;
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(N * 3), 3));
+    g.setAttribute('birth', new THREE.BufferAttribute(birth, 1)); g.setAttribute('dir', new THREE.BufferAttribute(dir, 3));
+    g.setAttribute('speed', new THREE.BufferAttribute(speed, 1)); g.setAttribute('seed', new THREE.BufferAttribute(seed, 1));
+    g.setAttribute('big', new THREE.BufferAttribute(big, 1)); g.setAttribute('shade', new THREE.BufferAttribute(shade, 1));
+    g.boundingSphere = new THREE.Sphere(new THREE.Vector3(), 1e4);
+    const mat = new THREE.ShaderMaterial({
+      transparent: true, depthWrite: false,
+      uniforms: { prog: { value: 0 }, aim: { value: new THREE.Vector3(0, -1, 0) }, bias: { value: new THREE.Vector3() }, spd: { value: 1 }, origin: { value: new THREE.Vector3() }, t: { value: 0 }, px: { value: 800 }, fade: { value: 1 } },
+      vertexShader: `
+        attribute float birth, speed, seed, big, shade; attribute vec3 dir;
+        uniform float prog, t, px, fade, spd; uniform vec3 origin, bias, aim;
+        varying float vA, vS;
+        void main(){
+          float age = prog - birth;
+          if (age <= 0.) { gl_Position = vec4(2., 2., 2., 1.); gl_PointSize = 0.; return; }
+          // leaves the horn's opening as a tight jet along the nozzle axis, then fans out into the cloud
+          float kj = 1. - exp(-age * 30.);
+          float k = 1. - exp(-max(0., age - .015) * 5.5);
+          vec3 p = origin + aim * (.35 + .35 * fract(seed * 3.1)) * kj + normalize(dir + bias) * speed * spd * k;
+          p.y += age * age * (1.2 + 2.4 * big);                          // billows rise as they slow
+          float w = (.15 + age * (1.6 * big + .4)) * smoothstep(0., .06, age);
+          p += vec3(sin(seed * 12.1 + t * .5 + age * 7.), cos(seed * 7.3 + t * .4 + age * 5.), sin(seed * 3.7 + t * .3)) * w;
+          vec4 mv = modelViewMatrix * vec4(p, 1.);
+          gl_Position = projectionMatrix * mv;
+          float size = big > 0. ? mix(.25, 4.2, big) * (.07 + min(1., age * age * 9. + age * 2.)) : .045 + .05 * fract(seed);
+          gl_PointSize = min(size * px / -mv.z, 900.);
+          vA = (big > 0. ? .42 + .4 * (1. - smoothstep(0., .08, age)) : .9) * smoothstep(0., .004, age) * fade;
+          vS = shade;
+        }`,
+      fragmentShader: `
+        varying float vA, vS;
+        void main(){
+          float d = length(gl_PointCoord - .5);
+          float a = smoothstep(.5, 0., d); a *= a * vA;
+          if (a < .004) discard;
+          gl_FragColor = vec4(vec3(vS * .985 + .015 * (1. - d)), a);
+        }`
+    });
+    const pts = new THREE.Points(g, mat); pts.frustumCulled = false; pts.renderOrder = 2;
+    return pts;
+  })();
 
   logoImg.onload = () => { M.body.map = makeLabel(); M.body.needsUpdate = true; };
   M.body.map = makeLabel();
 
   const spin = new THREE.Group(); spin.add(ext);
   const flip = new THREE.Group(); flip.add(spin);
-  const root = new THREE.Group(); root.add(flip); scene.add(root);
+  const root = new THREE.Group(); root.add(flip); scene.add(root); scene.add(dust);
 
   let W = innerWidth, H = innerHeight;
   const resize = () => { W = innerWidth; H = innerHeight; renderer.setSize(W, H, false); camera.aspect = W / H; camera.updateProjectionMatrix(); };
@@ -854,11 +945,14 @@ if (renderer) {
 
   const about = $('#about');
   const clock = new THREE.Clock();
+  const tipW = new THREE.Vector3(), sstep = (a, b, x) => { const k = clamp((x - a) / (b - a), 0, 1); return k * k * (3 - 2 * k); };
   gsap.ticker.add(() => {
     const t = clock.getElapsedTime();
-    const aboutTop = about.offsetTop || H;
-    const y = SS.current !== undefined ? scrollY : 0;
-    const p = clamp(y / aboutTop, 0, 1), e = easeIO(p);
+    const st = window.__heroST, S1 = st ? st.end - st.start : H * 1.4;
+    const aboutTop = about.getBoundingClientRect().top + scrollY;
+    const y = scrollY;
+    const p1 = clamp(y / S1, 0, 1);                                         // discharge (hero pinned)
+    const p2 = clamp((y - S1) / Math.max(1, aboutTop - S1), 0, 1), e = easeIO(p2); // rotate + descend into About
     const after = Math.max(0, y - aboutTop);
     if (after > H * 1.25) { canvas.style.visibility = 'hidden'; return; }
     canvas.style.visibility = 'visible';
@@ -867,14 +961,30 @@ if (renderer) {
     const B = mob ? { x: .5, y: .27, s: .56 } : { x: .245, y: .5, s: 1.12 };
     const [ax, ay] = toWorld(A.x, A.y), [bx, by] = toWorld(B.x, B.y);
     mouse.sx += (mouse.x - mouse.sx) * .05; mouse.sy += (mouse.y - mouse.sy) * .05;
-    const arc = Math.sin(Math.PI * e);
-    root.position.set(lerp(ax, bx, e), lerp(ay, by, e) + arc * .5 + Math.sin(t * 1.1) * .06 * (1 - arc) + after * visH() / H, arc * 1.3);
-    const s = lerp(A.s, B.s, e) * ext3d.intro;
-    root.scale.setScalar(s);
-    // upright rotation: a full turn around its vertical axis while it travels left
-    flip.rotation.z = 0; // no flip — it stays upright and spins on its own axis
-    flip.rotation.x = mouse.sy * .18;
-    spin.rotation.y = -.35 + Math.sin(t * .45) * .28 + mouse.sx * .55 + e * Math.PI * 2 + (1 - ext3d.intro) * -3;
+    const press = sstep(0, .06, p1) * (1 - sstep(0, .25, p2));              // lever squeezed while it fires
+    const firing = press * (1 - sstep(.86, 1, p1));
+    const arc = Math.sin(Math.PI * e), calm = (1 - arc) * (1 - firing);
+    const shake = firing * .018;
+    root.position.set(
+      lerp(ax, bx, easeIO(clamp(p2 * 1.3, 0, 1))) + Math.sin(t * 47) * shake,
+      lerp(ay, by, e) - arc * 1.0 + Math.sin(t * 1.1) * .06 * calm + Math.cos(t * 53) * shake + after * visH() / H,
+      arc * .9);
+    root.scale.setScalar(lerp(A.s, B.s, e) * ext3d.intro);
+    leverTop.rotation.z = -.2 * press;
+    bendHose(firing, t);
+    // rotation: a full turn on its own axis while it descends, leaning into the drop
+    flip.rotation.z = -arc * .32 + firing * .05;
+    flip.rotation.x = mouse.sy * .18 * calm;
+    spin.rotation.y = -.35 + Math.sin(t * .45) * .28 * calm + mouse.sx * .55 * calm + e * Math.PI * 2 + (1 - ext3d.intro) * -3;
+    // powder cloud
+    if (p2 === 0) { root.updateMatrixWorld(true); tip.getWorldPosition(tipW); const O = dust.material.uniforms.origin.value; if (O.lengthSq() === 0) O.copy(tipW); else O.lerp(tipW, .25);
+      tipAxis.getWorldPosition(axW); axW.sub(tipW).normalize(); dust.material.uniforms.aim.value.lerp(axW, .25).normalize(); }
+    const U = dust.material.uniforms;
+    if (mob) { U.bias.value.set(.35, 1.25, 0); U.spd.value = .62; } else { U.bias.value.set(0, .12, 0); U.spd.value = 1; }
+    U.prog.value = p1 * .82; U.t.value = t; U.fade.value = 1 - sstep(0, .55, p2);
+    U.px.value = renderer.getPixelRatio() * H / (2 * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)));
+    dust.position.y = Math.max(0, y - S1) * visH() / H;
+    dust.visible = p1 > .001 && U.fade.value > .001;
     renderer.render(scene, camera);
   });
 }
@@ -972,8 +1082,7 @@ const t0 = Date.now(), pad = n => String(n).padStart(2, '0');
 const cairo = new Intl.DateTimeFormat('en-GB', { timeZone: 'Africa/Cairo', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
 const tickClock = () => {
   const s = Math.floor((Date.now() - t0) / 1000);
-  $('#upt').textContent = `${pad(Math.floor(s / 3600))}:${pad(Math.floor(s / 60) % 60)}:${pad(s % 60)}`;
-  const c = cairo.format(new Date()); $('#heroClock').textContent = c; $('#footClock').textContent = c.slice(0, 5);
+  const c = cairo.format(new Date()); $('#footClock').textContent = c.slice(0, 5);
 };
 tickClock(); setInterval(tickClock, 1000);
 
@@ -1035,7 +1144,7 @@ intro.to('#loaderBar', { scaleX: 1, duration: 1.1, ease: 'expo.inOut' })
   .from('#heroBg', { scale: 1.3, duration: 2.4, ease: 'expo.out' }, '-=1')
   .from('#heroInner h1 .ch', { yPercent: 120, rotation: 12, opacity: 0, duration: 1.4, stagger: .022, ease: 'expo.out' }, '-=2.1')
   .from('#heroInner p .ln > span', { yPercent: 115, duration: 1.4, ease: 'expo.out' }, '-=1.2')
-  .from('.hero-cta, #nav, #cue, .hero-status', { opacity: 0, y: 20, duration: 1.2, stagger: .08, ease: 'expo.out' }, '-=1.2')
+  .from('.hero-cta, #nav, #cue', { opacity: 0, y: 20, duration: 1.2, stagger: .08, ease: 'expo.out' }, '-=1.2')
   .to(ext3d, { intro: 1, duration: 2.4, ease: 'elastic.out(1,.6)' }, '-=2');
 
 addEventListener('load', () => ScrollTrigger.refresh());
